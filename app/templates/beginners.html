@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}A股智析 - 新手学堂{% endblock %}
+{% set active_tab = 'beginners' %}
+
+{% block content %}
+<div class="page-header">
+    <h1>新手学堂</h1>
+    <p class="page-desc">从零开始学炒股，AI 助你轻松入门</p>
+</div>
+
+<div class="beginner-layout">
+    <!-- 左侧：主题选择 -->
+    <div class="beginner-sidebar">
+        <h4>学习主题</h4>
+        <div class="topic-list">
+            <button class="topic-btn active" data-topic="basics" onclick="loadTopic('basics', this)">
+                A股基础知识
+            </button>
+            <button class="topic-btn" data-topic="analysis" onclick="loadTopic('analysis', this)">
+                如何分析股票
+            </button>
+            <button class="topic-btn" data-topic="strategy" onclick="loadTopic('strategy', this)">
+                新手交易策略
+            </button>
+            <button class="topic-btn" data-topic="risk" onclick="loadTopic('risk', this)">
+                风险管理与心态
+            </button>
+            <button class="topic-btn" data-topic="terms" onclick="loadTopic('terms', this)">
+                术语大全（20个核心术语）
+            </button>
+        </div>
+
+        <!-- 快速问答 -->
+        <div class="quick-ask">
+            <h4>快速问答</h4>
+            <p style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;">输入你的问题，AI 即时回答</p>
+            <input type="text" id="quick-ask-input" class="input-search" placeholder="例如：什么是涨停板？">
+            <button class="btn btn-primary" style="width:100%;margin-top:8px;" onclick="askQuestion()">提问</button>
+            <div id="quick-ask-result" style="margin-top:10px;font-size:13px;"></div>
+        </div>
+    </div>
+
+    <!-- 右侧：内容展示 -->
+    <div class="beginner-content" id="beginner-content">
+        <div class="loading" style="padding:60px;">选择一个学习主题开始...</div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// 页面加载时自动加载第一个主题
+document.addEventListener('DOMContentLoaded', function() {
+    loadTopic('basics', document.querySelector('.topic-btn[data-topic="basics"]'));
+});
+
+async function loadTopic(topic, btn) {
+    // 切换 active
+    document.querySelectorAll('.topic-btn').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+
+    const container = document.getElementById('beginner-content');
+    container.innerHTML = '<div class="loading" style="padding:60px;">AI 正在生成教学内容...</div>';
+
+    try {
+        const resp = await fetch(`/api/beginners/content?topic=${topic}`);
+        const data = await resp.json();
+
+        if (data.error) {
+            container.innerHTML = `<div class="empty-state">${data.error}</div>`;
+            return;
+        }
+
+        let html = `<article class="lesson-article">
+            <h2>${data.title || ''}</h2>
+            <div class="lesson-body">${formatContent(data.content || '')}</div>
+            <div class="lesson-takeaway">
+                <strong>核心要点：</strong>${data.key_takeaway || ''}
+            </div>
+            ${data.next_topic ? `<div class="lesson-next">下一步建议学习：${data.next_topic}</div>` : ''}
+        </article>`;
+        container.innerHTML = html;
+    } catch(e) {
+        container.innerHTML = '<div class="empty-state">加载失败，请稍后重试</div>';
+    }
+}
+
+function formatContent(text) {
+    // 简单的 Markdown 转换
+    return text
+        .replace(/\\n/g, '\n')
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\n\n/g, '</p><p>')
+        .replace(/\n- /g, '\n<li>')
+        .replace(/\n\d\. /g, '\n<li>')
+        .replace(/\n/g, '<br>');
+}
+
+async function askQuestion() {
+    const input = document.getElementById('quick-ask-input');
+    const result = document.getElementById('quick-ask-result');
+    const q = input.value.trim();
+    if (!q) return;
+
+    result.innerHTML = '<span style="color:var(--text-secondary)">思考中...</span>';
+    try {
+        const resp = await fetch(`/api/quickask?q=${encodeURIComponent(q)}`);
+        const data = await resp.json();
+        result.innerHTML = `
+            <p style="margin-bottom:6px;">${data.answer || data.error || '暂无回答'}</p>
+            ${data.disclaimer ? '<span style="font-size:11px;color:var(--text-secondary)">' + data.disclaimer + '</span>' : ''}
+        `;
+    } catch(e) {
+        result.innerHTML = '<span style="color:var(--up)">请求失败</span>';
+    }
+}
+
+// 回车键触发提问
+document.getElementById('quick-ask-input').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') askQuestion();
+});
+</script>
+{% endblock %}

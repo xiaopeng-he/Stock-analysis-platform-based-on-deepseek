@@ -1,0 +1,59 @@
+<!-- 市场温度计——带前端缓存，避免每次页面导航重复请求 -->
+<span class="market-temp-widget" id="market-temp-widget">
+    <span class="nav-hint">加载中...</span>
+</span>
+
+<script>
+(function() {
+    const CACHE_KEY = 'market_temp_cache';
+    const CACHE_TTL = 30000; // 30秒
+
+    function renderTemp(indices) {
+        if (!indices || !Object.keys(indices).length) return;
+        let totalChange = 0, count = 0;
+        for (const [name, idx] of Object.entries(indices)) {
+            totalChange += idx.change_pct || 0;
+            count++;
+        }
+        const avgChange = count ? totalChange / count : 0;
+
+        let temp, label;
+        if (avgChange > 2) { temp = 'hot'; label = '市场火热'; }
+        else if (avgChange > 0.5) { temp = 'warm'; label = '市场偏暖'; }
+        else if (avgChange > -0.5) { temp = 'mild'; label = '平静'; }
+        else if (avgChange > -2) { temp = 'cool'; label = '市场偏冷'; }
+        else { temp = 'cold'; label = '市场冰点'; }
+
+        const emoji = { hot: '🔥', warm: '🌤', mild: '☁', cool: '🌧', cold: '❄' }[temp];
+        let html = `<span class="temp-badge temp-${temp}">${emoji} ${label}</span>`;
+        for (const [name, idx] of Object.entries(indices)) {
+            const arrow = idx.change_pct >= 0 ? '↑' : '↓';
+            const clr = idx.change_pct >= 0 ? 'var(--up)' : 'var(--down)';
+            html += `<span class="market-item">${name.slice(0,2)} <span style="color:${clr}">${arrow}${Math.abs(idx.change_pct).toFixed(1)}%</span></span>`;
+        }
+        document.getElementById('market-temp-widget').innerHTML = html;
+    }
+
+    // 先尝试从缓存恢复（秒开）
+    try {
+        const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
+        if (cached && Date.now() - cached.ts < CACHE_TTL) {
+            renderTemp(cached.data);
+        }
+    } catch(e) {}
+
+    // 后台更新
+    (async function refresh() {
+        try {
+            const resp = await fetch('/api/market/snapshot');
+            const data = await resp.json();
+            const indices = data.indices || {};
+            if (Object.keys(indices).length) {
+                renderTemp(indices);
+                localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: indices }));
+            }
+        } catch(e) {}
+        setTimeout(refresh, 30000);
+    })();
+})();
+</script>

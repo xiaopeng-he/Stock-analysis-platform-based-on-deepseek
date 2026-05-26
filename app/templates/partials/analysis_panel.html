@@ -1,0 +1,155 @@
+<!-- AI 分析面板 v2.0 —— 七维深度分析展示 -->
+<div id="analysis-panel" class="analysis-card">
+    <div class="analysis-header">
+        <h3 style="font-size:15px;">AI 七维深度分析</h3>
+        <span id="ai-badge" class="analysis-badge neutral">分析中...</span>
+    </div>
+
+    <!-- 操作建议卡片 -->
+    <div id="ai-operation" class="ai-operation-card hidden">
+        <div class="op-main">
+            <span id="op-action" class="op-action-label">--</span>
+            <span id="op-position" class="op-position">--</span>
+        </div>
+        <div class="op-details">
+            <div class="op-detail-col">
+                <span class="op-label">入场区间</span>
+                <span id="op-entry" class="op-value">--</span>
+            </div>
+            <div class="op-detail-col">
+                <span class="op-label">止损位</span>
+                <span id="op-stop" class="op-value price-down">--</span>
+            </div>
+            <div class="op-detail-col">
+                <span class="op-label">目标1</span>
+                <span id="op-target1" class="op-value price-up">--</span>
+            </div>
+            <div class="op-detail-col">
+                <span class="op-label">目标2</span>
+                <span id="op-target2" class="op-value price-up">--</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 分析正文 -->
+    <div id="ai-summary" class="analysis-summary">等待 DeepSeek AI 分析结果...</div>
+
+    <!-- 关键点 -->
+    <ul id="ai-keypoints" class="analysis-key-points"></ul>
+
+    <!-- 操作建议文字 -->
+    <div id="ai-tech-detail" class="analysis-tech-detail" style="display:none;"></div>
+
+    <!-- 行为金融学提示 -->
+    <div id="ai-behavioral" class="ai-behavioral-note hidden"></div>
+
+    <!-- 底部元信息 -->
+    <div id="ai-meta" class="analysis-meta"></div>
+    <!-- 难度调节按钮 -->
+    <div id="adjust-buttons" class="adjust-buttons hidden" style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+        <button class="btn-outline" onclick="adjustOutput('simple')" style="font-size:11px">看不懂，解释一下</button>
+        <button class="btn-outline" onclick="adjustOutput('pro')" style="font-size:11px">更专业一点</button>
+        <button class="btn-outline" onclick="adjustOutput('tldr')" style="font-size:11px">只要重点</button>
+    </div>
+</div>
+
+<script>
+// 存储当前分析原文
+let _currentAnalysis = '';
+// 难度调节
+async function adjustOutput(mode) {
+    if (!_currentAnalysis) return;
+    const btn = event.target;
+    btn.disabled = true; btn.textContent = '...';
+    try {
+        const r = await fetch(`/api/adjust?content=${encodeURIComponent(_currentAnalysis)}&mode=${mode}`);
+        const d = await r.json();
+        document.getElementById('ai-summary').textContent = d.result || _currentAnalysis;
+        showToast({simple:'已切换为白话版',pro:'已切换为专业版',tldr:'已切换为重点版'}[mode]||'已切换', 'info');
+    } catch(e) {}
+    btn.disabled = false; btn.textContent = {simple:'看不懂，解释一下',pro:'更专业一点',tldr:'只要重点'}[mode];
+}
+</script>
+
+<script>
+(function() {
+    const SENTIMENT_MAP = {
+        '强烈看多': 'positive', '看多': 'positive', 'positive': 'positive',
+        '中性偏多': 'neutral', '中性': 'neutral', '中性偏空': 'neutral',
+        'neutral': 'neutral',
+        '看空': 'negative', '强烈看空': 'negative', 'negative': 'negative',
+    };
+
+    document.body.addEventListener('htmx:sseMessage', function(evt) {
+        if (evt.detail.type !== 'analysis') return;
+        try {
+            const data = JSON.parse(evt.detail.data);
+            if (data.error) return;
+
+            // 1) 情绪徽章
+            const badge = document.getElementById('ai-badge');
+            const sentiment = data.sentiment || '中性';
+            const badgeClass = SENTIMENT_MAP[sentiment] || 'neutral';
+            badge.textContent = sentiment + (data.confidence ? ' (' + Math.round(data.confidence * 100) + '%)' : '');
+            badge.className = 'analysis-badge ' + badgeClass;
+
+            // 2) 操作建议卡片
+            const opAdvice = data.operation_advice;
+            if (opAdvice) {
+                document.getElementById('ai-operation').classList.remove('hidden');
+                const actionEl = document.getElementById('op-action');
+                actionEl.textContent = opAdvice.action || '--';
+                actionEl.className = 'op-action-label op-' + (opAdvice.action || '').replace(/[^a-zA-Z\u4e00-\u9fff]/g, '');
+                document.getElementById('op-position').textContent = '仓位: ' + (opAdvice.position_ratio || '--');
+                document.getElementById('op-entry').textContent = opAdvice.entry_zone || '--';
+                document.getElementById('op-stop').textContent = opAdvice.stop_loss || '--';
+                document.getElementById('op-target1').textContent = opAdvice.target_1 || '--';
+                document.getElementById('op-target2').textContent = opAdvice.target_2 || '--';
+            }
+
+            // 3) 摘要
+            _currentAnalysis = data.summary || data.technical_analysis || '';
+            document.getElementById('ai-summary').textContent = _currentAnalysis || '暂无分析内容';
+            document.getElementById('adjust-buttons').classList.remove('hidden');
+
+            // 4) 关键点
+            const kpList = document.getElementById('ai-keypoints');
+            kpList.innerHTML = '';
+            if (data.key_points?.length) {
+                data.key_points.forEach(p => {
+                    const li = document.createElement('li');
+                    li.textContent = p;
+                    kpList.appendChild(li);
+                });
+            }
+
+            // 5) 技术分析详情
+            const techDetail = document.getElementById('ai-tech-detail');
+            if (data.technical_analysis) {
+                techDetail.style.display = 'block';
+                techDetail.innerHTML = '<strong>技术分析:</strong> ' + data.technical_analysis;
+            }
+
+            // 6) 风险警告
+            if (data.risk_warning) {
+                const risk = document.createElement('p');
+                risk.style.cssText = 'color:#f59e0b;font-size:12px;margin-top:6px;';
+                risk.textContent = '⚠ ' + data.risk_warning;
+                document.getElementById('ai-summary').appendChild(risk);
+            }
+
+            // 7) 行为金融学提示
+            const behavNote = document.getElementById('ai-behavioral');
+            if (data.behavioral_note) {
+                behavNote.classList.remove('hidden');
+                behavNote.innerHTML = '<span class="tip-icon">行为金融学</span><p>' + data.behavioral_note + '</p>';
+            }
+
+            // 8) 元信息
+            document.getElementById('ai-meta').textContent =
+                '分析时间: ' + new Date().toLocaleTimeString('zh-CN') + '  |  七维分析 · DeepSeek AI';
+
+        } catch(e) { console.warn('analysis render error:', e); }
+    });
+})();
+</script>

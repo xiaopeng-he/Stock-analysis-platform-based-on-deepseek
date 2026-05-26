@@ -1,0 +1,36 @@
+{% extends "base.html" %}{% block title %}市场资讯 - A股智析{% endblock %}{% set active_tab='news' %}
+{% block content %}
+<div class="page-header"><h1>市场资讯</h1><p class="page-desc">A股相关要闻，点击标题跳转原文阅读完整报道</p></div>
+<div class="news-search-row" style="margin-bottom:16px;display:flex;gap:10px;">
+    <input type="text" id="news-code" class="input-search" placeholder="输入股票代码查看个股新闻，留空看市场要闻" style="flex:1">
+    <button class="btn btn-primary" onclick="loadNews()">搜索</button>
+</div>
+<div id="news-container"><div class="loading">加载中...</div></div>
+{% endblock %}
+{% block scripts %}
+{% raw %}
+<script>
+async function loadNews(){
+    const code=document.getElementById('news-code').value.trim();
+    const container=document.getElementById('news-container');
+    container.innerHTML='<div class="loading">加载中...</div>';
+    try{
+        let url=code?`/api/news/${code}`:'/api/news/market';
+        const r=await fetch(url);const d=await r.json();
+        const news=d.news||d||[];
+        let h='';
+        news.forEach(n=>{
+            h+=`<div class="news-item" style="padding:12px 0">
+                ${n.url?`<a href="${n.url}" target="_blank" rel="noopener" class="news-title" style="font-size:14px">${n.title||''}</a>`
+                       :`<span class="news-title" style="font-size:14px">${n.title||''}</span>`}
+                <div class="news-meta"><span>${n.source||''}</span><span>${n.time||''}</span>${n.url?`<a href="${n.url}" target="_blank" rel="noopener" style="color:var(--accent);font-size:10px">阅读原文 →</a>`:''}</div>
+                ${n.summary?`<p style="font-size:11px;color:var(--text-secondary);margin-top:4px;line-height:1.5">${n.summary}</p>`:''}
+            </div>`;
+        });
+        container.innerHTML=h||'<div class="empty-state">暂无相关新闻</div>';
+    }catch(e){container.innerHTML='<div class="empty-state">加载失败</div>'}
+}
+loadNews();
+</script>
+{% endraw %}
+{% endblock %}

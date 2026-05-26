@@ -1,0 +1,40 @@
+{% extends "base.html" %}{% block title %}分析历史 - A股智析{% endblock %}{% set active_tab='history' %}
+{% block content %}
+<div class="page-header"><h1>分析历史</h1><p class="page-desc">查看所有AI分析记录和投资组合方案</p></div>
+<div id="history-list"><div class="loading">加载中...</div></div>
+{% endblock %}
+{% block scripts %}
+{% raw %}
+<script>
+(async function(){
+    try{
+        const r=await fetch('/api/history/list?limit=20');const d=await r.json();
+        let h='';
+        d.items.forEach(item=>{
+            const typeLabel=item.analysis_type==='portfolio'?'投资组合':item.analysis_type==='realtime'?'实时分析':'分析';
+            const typeIcon=item.analysis_type==='portfolio'?'':'';
+            const sentimentColor=item.ai_sentiment==='看多'||item.ai_sentiment==='positive'?'price-up':item.ai_sentiment==='看空'?'price-down':'';
+            h+=`<div class="position-card-v2" style="margin-bottom:10px">
+                <div class="pos-v2-header">
+                    <span style="font-size:11px;color:var(--text-secondary)">${item.created_at?.slice(0,16)||''}</span>
+                    <span style="font-size:11px;background:rgba(59,130,246,.08);padding:2px 8px;border-radius:10px;color:var(--accent)">${typeIcon} ${typeLabel}</span>
+                    <a href="/stock/${item.stock_code}" style="font-weight:600;margin-left:auto">${item.stock_name||item.stock_code}</a>
+                    ${item.ai_sentiment?`<span class="${sentimentColor}" style="font-size:11px">${item.ai_sentiment}</span>`:''}
+                </div>`;
+            if(item.market_judgment)h+=`<p style="font-size:12px;color:var(--text-secondary);padding:6px 10px">${item.market_judgment}</p>`;
+            if(item.ai_summary)h+=`<p style="font-size:12px;color:var(--text-secondary);padding:6px 10px">${(item.ai_summary||'').slice(0,200)}</p>`;
+            if(item.positions&&item.positions.length){
+                h+='<div style="display:flex;gap:6px;flex-wrap:wrap;padding:0 10px 8px">';
+                item.positions.slice(0,5).forEach(p=>{
+                    h+=`<span style="font-size:10px;padding:2px 8px;background:rgba(255,255,255,.03);border-radius:4px">${p.name||''} ${p.suggested_shares||0}股</span>`;
+                });
+                h+='</div>';
+            }
+            h+=`<div style="font-size:10px;color:var(--text-secondary);text-align:right;padding:4px 10px">Token:${item.token_usage||'--'}</div></div>`;
+        });
+        document.getElementById('history-list').innerHTML=h||'<div class="empty-state">暂无分析记录</div>';
+    }catch(e){document.getElementById('history-list').innerHTML='<div class="empty-state">加载失败</div>'}
+})();
+</script>
+{% endraw %}
+{% endblock %}

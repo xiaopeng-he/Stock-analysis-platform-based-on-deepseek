@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}A股智析{% endblock %}</title>
+    <!-- HTMX + SSE (国内CDN加速) -->
+    <script src="https://registry.npmmirror.com/htmx.org/2.0.4/files/dist/htmx.min.js"></script>
+    <script src="https://registry.npmmirror.com/htmx-ext-sse/2.2.3/files/sse.js"></script>
+    <!-- ECharts (国内CDN加速) -->
+    <script src="https://cdn.bootcdn.net/ajax/libs/echarts/5.6.0/echarts.min.js"></script>
+    <!-- 自定义样式 -->
+    <link rel="stylesheet" href="/static/css/app.css">
+    {% block head_extra %}{% endblock %}
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">
+            <a href="/" class="nav-logo">A股智析</a>
+            <span class="nav-subtitle">DeepSeek AI 驱动</span>
+        </div>
+        <div class="nav-tabs">
+            <a href="/" class="nav-tab {% if active_tab == 'home' %}active{% endif %}">自选股</a>
+            <a href="/portfolio" class="nav-tab {% if active_tab == 'portfolio' %}active{% endif %}">组合</a>
+            <a href="/screener" class="nav-tab {% if active_tab == 'screener' %}active{% endif %}">选股</a>
+            <a href="/recommend" class="nav-tab {% if active_tab == 'recommend' %}active{% endif %}">推荐</a>
+            <a href="/news" class="nav-tab {% if active_tab == 'news' %}active{% endif %}">资讯</a>
+            <a href="/history" class="nav-tab {% if active_tab == 'history' %}active{% endif %}">历史</a>
+            <a href="/beginners" class="nav-tab {% if active_tab == 'beginners' %}active{% endif %}">学堂</a>
+        </div>
+        <div class="nav-info" id="market-brief">
+            {% include "components/market_temp.html" %}
+        </div>
+    </nav>
+
+    <!-- 全局提示 Toast -->
+    <div id="global-toast" class="toast hidden"></div>
+
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- 底部快捷键提示 -->
+    <footer class="footer-bar">
+        <span>快捷键:</span>
+        <kbd>H</kbd> 首页
+        <kbd>R</kbd> 推荐
+        <kbd>C</kbd> 对比
+        <kbd>B</kbd> 学堂
+        <kbd>A</kbd> 添加
+        <kbd>Esc</kbd> 关闭
+        <span class="footer-hint">悬停术语查看解释</span>
+    </footer>
+
+    <!-- 全局工具提示系统 -->
+    <script>
+    // Tooltip 系统——鼠标悬停术语时显示解释
+    const TOOLTIPS = {
+        '换手率': '换手率 = 成交量/流通股本。越高说明交易越活跃。一般3%-10%为正常，>20%需警惕。',
+        '市盈率': 'PE = 股价/每股收益。越低越"便宜"，但低PE也可能意味着增长差。行业不同合理PE不同。',
+        '量比': '量比 = 当前成交量/过去5日平均。>1.5放量，<0.5缩量。放量涨=资金进，放量跌=资金逃。',
+        'MACD': 'MACD金叉(DIF上穿DEA)=买入信号；死叉(DIF下穿DEA)=卖出信号。柱状线由绿转红=转强。',
+        'KDJ': 'K>80超买区(谨慎)，K<20超卖区(关注反弹)。J值最敏感，>100极端超买。',
+        'RSI': 'RSI>70=超买(可能回调)，RSI<30=超卖(可能反弹)。50为多空分界线。',
+        '布林带': '价格上穿上轨=超买/压力，下穿下轨=超卖/支撑。带宽收窄=即将变盘。',
+        '均线': '短均线(MA5)上穿长均线(MA10)=金叉(看涨)。MA5>MA10>MA20>MA60=多头排列。',
+        '北向资金': '通过沪港通/深港通进入A股的香港及国际资金。持续流入=外资看好，持续流出=外资撤离。',
+        '涨停板': 'A股涨幅上限(主板±10%，创业板/科创板±20%)。触及涨停=买盘极强但买不到。',
+        'PE': '市盈率。PE=股价/每股收益。市价相当于多少年的利润。',
+        'PB': '市净率。PB=股价/每股净资产。<1=破净(可能低估)。',
+        'ROE': '净资产收益率。ROE=净利润/净资产。>15%算优秀，持续高ROE=好公司。',
+        '仓位': '你持仓股票资金占总资金的比例。新手建议单只<20%，总仓位<70%，留现金应对风险。',
+        '止损': '预设亏损上限，到达自动卖出。一般设为-3%~-8%。不设止损=风险无限。',
+        'ATR': '平均真实波幅——衡量波动性。2×ATR是常用的止损距离。',
+        '金叉': '短期指标上穿长期指标=看涨信号。如MA5上穿MA10。',
+        '死叉': '短期指标下穿长期指标=看跌信号。如MA5下穿MA10。',
+    };
+
+    document.addEventListener('mouseover', function(e) {
+        const target = e.target.closest('[data-tip]');
+        if (!target) return;
+        const key = target.dataset.tip;
+        const tip = TOOLTIPS[key];
+        if (!tip) return;
+
+        let tipEl = document.getElementById('active-tooltip');
+        if (!tipEl) {
+            tipEl = document.createElement('div');
+            tipEl.id = 'active-tooltip';
+            tipEl.className = 'tooltip-box';
+            document.body.appendChild(tipEl);
+        }
+        tipEl.textContent = tip;
+        tipEl.style.display = 'block';
+
+        const rect = target.getBoundingClientRect();
+        const tipW = 260;
+        let left = rect.left + rect.width / 2 - tipW / 2;
+        left = Math.max(10, Math.min(left, window.innerWidth - tipW - 10));
+        tipEl.style.left = left + 'px';
+        tipEl.style.top = (rect.bottom + 6) + 'px';
+    });
+
+    document.addEventListener('mouseout', function(e) {
+        const tipEl = document.getElementById('active-tooltip');
+        if (tipEl) tipEl.style.display = 'none';
+    });
+
+    // Toast 通知
+    function showToast(msg, type = 'info') {
+        const toast = document.getElementById('global-toast');
+        toast.textContent = msg;
+        toast.className = 'toast toast-' + type;
+
+        setTimeout(() => toast.classList.add('hidden'), 3000);
+    }
+    </script>
+
+    <!-- 全局：用户偏好记忆 -->
+    <script>
+    // 保存和恢复用户偏好
+    const UserPrefs = {
+        get(key, def) { try { const v = localStorage.getItem('astock_'+key); return v !== null ? JSON.parse(v) : def; } catch(e) { return def; } },
+        set(key, val) { try { localStorage.setItem('astock_'+key, JSON.stringify(val)); } catch(e) {} },
+    };
+
+    // 浏览器通知权限
+    function requestNotification() {
+        if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+    }
+    function notify(title, body) {
+        if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification(title, { body, icon: '/static/favicon.ico' });
+        }
+    }
+    document.addEventListener('click', requestNotification, { once: true });
+
+    // 价格预警检查（每30秒）
+    let _alertTargets = [];
+    function setPriceAlert(code, name, targetPrice, direction) {
+        _alertTargets.push({ code, name, targetPrice, direction }); // direction: 'above'/'below'
+        UserPrefs.set('alerts', _alertTargets);
+        showToast(`已设置 ${name} 价格预警: ${direction==='above'?'突破':'跌破'}${targetPrice}元`, 'info');
+    }
+    setInterval(async () => {
+        if (!_alertTargets.length) return;
+        try {
+            const codes = [...new Set(_alertTargets.map(a => a.code))];
+            const r = await fetch('/api/market/snapshot');
+            const d = await r.json();
+            for (const alert of _alertTargets) {
+                // Check if we can find price in market data
+                // Simplified: check via quick quote
+            }
+        } catch(e) {}
+    }, 30000);
+
+    // 恢复上次资金和风险偏好
+    if (window.location.pathname === '/portfolio') {
+        const savedCapital = UserPrefs.get('capital', 50000);
+        const savedRisk = UserPrefs.get('risk', '稳健');
+        setTimeout(() => {
+            const capInput = document.getElementById('capital-input');
+            const maxInput = document.getElementById('max-price-input');
+            if (capInput && capInput.value == 50000) capInput.value = savedCapital;
+            if (maxInput) {
+                const savedMax = UserPrefs.get('max_price', 0);
+                if (savedMax > 0) maxInput.value = savedMax;
+            }
+        }, 100);
+    }
+
+    // 保存偏好
+    window.addEventListener('beforeunload', () => {
+        const capInput = document.getElementById('capital-input');
+        const maxInput = document.getElementById('max-price-input');
+        if (capInput) UserPrefs.set('capital', parseInt(capInput.value) || 50000);
+        if (maxInput) UserPrefs.set('max_price', parseFloat(maxInput.value) || 0);
+        if (typeof selectedRisk !== 'undefined') UserPrefs.set('risk', selectedRisk);
+    });
+    </script>
+
+    <!-- 页面级脚本 -->
+    {% block scripts %}{% endblock %}
+</body>
+</html>

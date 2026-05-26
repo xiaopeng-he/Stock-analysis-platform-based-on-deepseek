@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block title %}A股智析 - 一键推荐{% endblock %}
+{% set active_tab = 'recommend' %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>AI 智能推荐</h1>
+        <p class="page-desc">DeepSeek AI 综合大盘指数、板块轮动、资金流向、涨停板、市场新闻，为你精选优质标的</p>
+    </div>
+    <a href="/portfolio" class="btn btn-accent">智能组合配置 →</a>
+</div>
+
+<!-- 市场快照 -->
+<div id="market-snapshot" class="snapshot-grid">
+    <div class="snapshot-card">
+        <h4>大盘指数</h4>
+        <div id="snap-indices">加载中...</div>
+    </div>
+    <div class="snapshot-card">
+        <h4>热门板块</h4>
+        <div id="snap-sectors">加载中...</div>
+    </div>
+    <div class="snapshot-card">
+        <h4>资金面</h4>
+        <div id="snap-north">加载中...</div>
+    </div>
+</div>
+
+<!-- 分析进度 -->
+<div id="analysis-progress" class="progress-bar-container hidden">
+    <div class="progress-bar">
+        <div class="progress-fill" id="progress-fill"></div>
+    </div>
+    <p id="progress-msg">准备分析...</p>
+</div>
+
+<!-- 推荐结果 -->
+<div id="recommend-result" class="recommend-container">
+    <div class="empty-state" style="padding:60px 0;">
+        <p style="font-size:18px;margin-bottom:16px;">DeepSeek AI 将分析全市场数据，为你精选推荐</p>
+        <button class="btn btn-primary btn-lg" onclick="startRecommend()">
+            开始智能分析
+        </button>
+        <p style="color:var(--text-secondary);font-size:12px;margin-top:10px;">
+            分析范围：大盘指数 · 行业板块 · 热门概念 · 资金流向 · 涨停板 · 市场新闻
+        </p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function startRecommend() {
+    // 隐藏初始提示
+    document.getElementById('recommend-result').innerHTML = '';
+    // 显示进度条
+    document.getElementById('analysis-progress').classList.remove('hidden');
+
+    const evtSource = new EventSource('/api/recommend/stream');
+
+    evtSource.addEventListener('snapshot', function(e) {
+        const data = JSON.parse(e.data);
+        // 渲染大盘快照
+        let idxHtml = '';
+        for (const [name, idx] of Object.entries(data.indices || {})) {
+            const color = idx.change_pct >= 0 ? 'var(--up)' : 'var(--down)';
+            const arrow = idx.change_pct >= 0 ? '↑' : '↓';
+            idxHtml += `<div><span>${name}</span> <span style="color:${color}">${idx.price.toFixed(2)} ${arrow}${Math.abs(idx.change_pct).toFixed(2)}%</span></div>`;
+        }
+        document.getElementById('snap-indices').innerHTML = idxHtml;
+
+        let secHtml = '';
+        for (const s of (data.sectors || []).slice(0, 6)) {
+            const color = s.change_pct >= 0 ? 'var(--up)' : 'var(--down)';
+            secHtml += `<span class="sector-tag" style="color:${color}">${s.name} ${s.change_pct >= 0 ? '+' : ''}${s.change_pct.toFixed(2)}%</span>`;
+        }
+        document.getElementById('snap-sectors').innerHTML = secHtml || '暂无数据';
+
+        const nf = data.north_flow || {};
+        document.getElementById('snap-north').innerHTML = `
+            <div style="font-size:20px;font-weight:700;color:${(nf.today||0) >= 0 ? 'var(--up)' : 'var(--down)'}">${(nf.today||0).toFixed(2)}亿</div>
+            <div style="font-size:12px;color:var(--text-secondary)">北向资金净流入</div>
+            <div style="font-size:11px;color:var(--text-secondary);margin-top:4px">涨停: ${data.limit_up_count || 0}家</div>
+        `;
+    });
+
+    evtSource.addEventListener('status', function(e) {
+        const data = JSON.parse(e.data);
+        document.getElementById('progress-fill').style.width = data.progress + '%';
+        document.getElementById('progress-msg').textContent = data.msg;
+    });
+
+    evtSource.addEventListener('result', function(e) {
+        const data = JSON.parse(e.data);
+        document.getElementById('analysis-progress').classList.add('hidden');
+        renderRecommendations(data);
+        evtSource.close();
+    });
+
+    evtSource.onerror = function(e) {
+        evtSource.close();
+        document.getElementById('analysis-progress').classList.add('hidden');
+        document.getElementById('recommend-result').innerHTML =
+            '<div class="empty-state" style="padding:40px"><p>连接断开或分析超时，请<a href="javascript:startRecommend()" style="color:var(--accent)">重试</a></p></div>';
+    };
+}
+
+function renderRecommendations(data) {
+    let html = '';
+
+    // 大盘研判 + 宏观分析
+    if (data.market_assessment) {
+        html += `<div class="market-judgment">
+            <h3>大盘研判</h3>
+            <p>${data.market_assessment}</p>`;
+
+        // 宏观四维度
+        if (data.macro_analysis) {
+            const ma = data.macro_analysis;
+            html += `<div class="macro-section">
+                <div class="macro-item"><span class="macro-label">经济周期</span><div class="macro-value">${ma.cycle_stage || '--'}</div></div>
+                <div class="macro-item"><span class="macro-label">政策环境</span><div class="macro-value">${ma.policy_direction || '--'}</div></div>
+                <div class="macro-item"><span class="macro-label">市场情绪</span><div class="macro-value">${ma.market_sentiment || '--'}</div></div>
+                <div class="macro-item"><span class="macro-label">大盘趋势</span><div class="macro-value">${ma.index_trend || '--'}</div></div>
+            </div>`;
+        }
+
+        // 板块轮动
+        if (data.sector_rotation) {
+            const sr = data.sector_rotation;
+            html += `<div style="margin-top:10px;font-size:13px;">
+                <strong>领涨板块：</strong>${(sr.leading_sectors||[]).join('、')}
+                ${sr.rotation_direction ? `<br><strong>轮动方向：</strong>${sr.rotation_direction}` : ''}
+            </div>`;
+        }
+
+        html += `${data.hot_direction ? `<p class="hot-direction">主线方向：${data.hot_direction}</p>` : ''}
+            ${data.risk_level ? `<span class="risk-badge risk-${data.risk_level}">整体风险：${data.risk_level === '低' ? '🟢' : data.risk_level === '中' ? '🟡' : '🔴'} ${data.risk_level}</span>` : ''}
+        </div>`;
+    }
+
+    // 错误处理
+    if (data.error) {
+        html += `<div class="empty-state"><p>${data.error}</p></div>`;
+    }
+
+    // 推荐列表
+    if (data.recommendations && data.recommendations.length > 0) {
+        html += '<h3 style="margin:20px 0 12px;">推荐买入标的</h3><div class="recommend-grid">';
+        data.recommendations.forEach((r, i) => {
+            const price = r.current_price || r.price || 0;
+            const change = r.current_change || 0;
+            const colorClass = change >= 0 ? 'price-up' : 'price-down';
+            const arrow = change >= 0 ? '↑' : '↓';
+            const riskEmoji = r.risk_level === '低' ? '🟢' : r.risk_level === '中' ? '🟡' : '🔴';
+            const suitBadge = r.suitable_for === '新手' ? '<span class="badge badge-green">适合新手</span>' :
+                              r.suitable_for === '均可' ? '<span class="badge badge-blue">新手友好</span>' : '';
+
+            html += `
+            <div class="recommend-card">
+                <div class="rec-header">
+                    <span class="rec-rank">#${i + 1}</span>
+                    <div>
+                        <a href="/stock/${r.code}" class="rec-name">${r.name || '--'}</a>
+                        <span class="rec-code">${r.code}</span>
+                    </div>
+                    ${suitBadge}
+                </div>
+                <div class="rec-price-row">
+                    <span class="rec-price ${colorClass}">${price.toFixed(2)}</span>
+                    <span class="rec-change ${colorClass}">${arrow}${Math.abs(change).toFixed(2)}%</span>
+                </div>
+                <div class="rec-body">
+                    <p class="rec-reason">${r.reason || ''}</p>
+                    ${r.strategy ? `<div class="rec-strategy">操作策略：${r.strategy}</div>` : ''}
+                    ${r.entry_timing ? `<div class="rec-strategy" style="margin-top:4px;border-left-color:#8b5cf6;">入场时机：${r.entry_timing}</div>` : ''}
+                </div>
+                <!-- 六因子评分 -->
+                ${r.factor_scores ? `
+                <div class="factor-scores">
+                    <div class="factor-item"><span class="factor-label">动量</span><span class="factor-val">${r.factor_scores.momentum||'-'}/10</span></div>
+                    <div class="factor-item"><span class="factor-label">资金</span><span class="factor-val">${r.factor_scores.capital_flow||'-'}/10</span></div>
+                    <div class="factor-item"><span class="factor-label">板块</span><span class="factor-val">${r.factor_scores.sector||'-'}/10</span></div>
+                    <div class="factor-item"><span class="factor-label">估值</span><span class="factor-val">${r.factor_scores.valuation||'-'}/10</span></div>
+                    <div class="factor-item"><span class="factor-label">催化剂</span><span class="factor-val">${r.factor_scores.catalyst||'-'}/10</span></div>
+                    <div class="factor-item"><span class="factor-label">风控</span><span class="factor-val">${r.factor_scores.risk_control||'-'}/10</span></div>
+                    <div class="factor-total">综合评分：${r.total_score || 0}/60</div>
+                </div>` : ''}
+                <div class="rec-footer">
+                    <span>风险：${riskEmoji} ${r.risk_level || '--'}</span>
+                    ${r.target_pct ? `<span class="target">目标：+${r.target_pct}%</span>` : ''}
+                    ${r.stop_loss_pct ? `<span class="stop-loss">止损：${r.stop_loss_pct}%</span>` : ''}
+                    ${r.hold_days ? `<span>周期：${r.hold_days}</span>` : ''}
+                </div>
+            </div>`;
+        });
+        html += '</div>';
+    }
+
+    // 风险警告
+    if (data.risk_warnings && data.risk_warnings.length) {
+        html += '<div class="risk-warnings"><h4>风险提示</h4><ul>';
+        data.risk_warnings.forEach(w => { html += `<li>${w}</li>`; });
+        html += '</ul></div>';
+    }
+
+    // 新手建议
+    if (data.beginner_advice) {
+        html += `<div class="beginner-tip"><span class="tip-icon">新手建议</span><p>${data.beginner_advice}</p></div>`;
+    }
+
+    // 底部元信息
+    if (data.generated_at) {
+        html += `<div class="rec-meta">生成时间：${data.generated_at} | 消耗 Token：${data.token_usage || '--'} | ${data.cached ? '缓存' : 'DeepSeek AI 实时分析'}</div>`;
+    }
+
+    html += '<div style="text-align:center;margin:20px 0;"><button class="btn btn-primary" onclick="startRecommend()">刷新分析</button></div>';
+
+    document.getElementById('recommend-result').innerHTML = html;
+}
+</script>
+{% endblock %}

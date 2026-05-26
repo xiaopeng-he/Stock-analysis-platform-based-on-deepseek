@@ -1,0 +1,48 @@
+{% extends "base.html" %}{% block title %}条件选股 - A股智析{% endblock %}{% set active_tab='screener' %}
+{% block content %}
+<div class="page-header"><h1>条件选股器</h1><p class="page-desc">多维度筛选，快速找到符合你策略的股票</p></div>
+<div class="screener-filters" style="background:var(--card-bg);border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin-bottom:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px">
+    <div><label style="font-size:11px;color:var(--text-secondary)">股价≤</label><input id="f-max-price" class="input-search" type="number" placeholder="不限" step="0.1"></div>
+    <div><label style="font-size:11px;color:var(--text-secondary)">股价≥</label><input id="f-min-price" class="input-search" type="number" placeholder="不限" step="0.1"></div>
+    <div><label style="font-size:11px;color:var(--text-secondary)">PE≤</label><input id="f-max-pe" class="input-search" type="number" placeholder="不限" step="1"></div>
+    <div><label style="font-size:11px;color:var(--text-secondary)">涨跌幅≥</label><input id="f-min-change" class="input-search" type="number" placeholder="-100" step="0.1" value="-100"></div>
+    <div><label style="font-size:11px;color:var(--text-secondary)">换手率≥</label><input id="f-min-turnover" class="input-search" type="number" placeholder="不限" step="0.1"></div>
+    <div><label style="font-size:11px;color:var(--text-secondary)">排序</label><select id="f-sort" class="input-search"><option value="change">涨跌幅</option><option value="price">价格</option><option value="pe">市盈率</option><option value="turnover">换手率</option></select></div>
+    <div style="display:flex;align-items:flex-end"><button class="btn btn-primary" onclick="runScreener()" style="width:100%">筛选</button></div>
+</div>
+<div class="quick-presets" style="margin-bottom:14px;display:flex;gap:6px;flex-wrap:wrap">
+    <button class="btn btn-sm" onclick="preset('cheap')">低价股(≤5元)</button>
+    <button class="btn btn-sm" onclick="preset('value')">低PE(≤15)</button>
+    <button class="btn btn-sm" onclick="preset('hot')">热门(涨≥3%)</button>
+    <button class="btn btn-sm" onclick="preset('active')">活跃(换手≥5%)</button>
+    <button class="btn btn-sm" onclick="preset('all')">全部</button>
+</div>
+<div id="screener-result"><div class="empty-state">设置条件后点击"筛选"</div></div>
+{% endblock %}
+{% block scripts %}{% raw %}<script>
+function preset(type){
+    const f={cheap:{maxp:5},value:{maxpe:15},hot:{minc:3},active:{mint:5},all:{}}[type]||{};
+    document.getElementById('f-max-price').value=f.maxp||'';
+    document.getElementById('f-min-price').value=f.minp||'';
+    document.getElementById('f-max-pe').value=f.maxpe||'';
+    document.getElementById('f-min-change').value=f.minc||'-100';
+    document.getElementById('f-min-turnover').value=f.mint||'';
+    runScreener();
+}
+async function runScreener(){
+    const p=o=>document.getElementById(o).value||'0';
+    const params=new URLSearchParams({
+        max_price:p('f-max-price'),min_price:p('f-min-price'),max_pe:p('f-max-pe'),
+        min_change:p('f-min-change'),min_turnover:p('f-min-turnover'),sort_by:document.getElementById('f-sort').value,limit:30
+    });
+    document.getElementById('screener-result').innerHTML='<div class="loading">筛选中...</div>';
+    try{
+        const r=await fetch('/api/screener/run?'+params);const d=await r.json();
+        if(!d.results.length){document.getElementById('screener-result').innerHTML='<div class="empty-state">没有匹配的股票，请放宽条件</div>';return}
+        let h=`<div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">找到 ${d.total} 只匹配股票</div><div class="compare-table-wrap"><table class="compare-table"><thead><tr><th>代码</th><th>名称</th><th>价格</th><th>涨跌幅</th><th>PE</th><th>换手率</th><th>1手成本</th></tr></thead><tbody>`;
+        d.results.forEach(s=>{const clr=s.change_pct>=0?'price-up':'price-down';h+=`<tr><td><a href="/stock/${s.code}">${s.code}</a></td><td>${s.name}</td><td>${s.price.toFixed(2)}</td><td class="${clr}">${s.change_pct>=0?'+':''}${s.change_pct.toFixed(2)}%</td><td>${s.pe>0?s.pe.toFixed(1):'--'}</td><td>${s.turnover.toFixed(1)}%</td><td>${s.lot_cost}元</td></tr>`});
+        h+='</tbody></table></div>';
+        document.getElementById('screener-result').innerHTML=h;
+    }catch(e){document.getElementById('screener-result').innerHTML='<div class="empty-state">请求失败</div>'}
+}
+</script>{% endraw %}{% endblock %}

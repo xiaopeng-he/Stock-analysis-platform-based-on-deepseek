@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}A股智析 - 股票对比{% endblock %}
+{% set active_tab = 'compare' %}
+
+{% block content %}
+<div class="page-header">
+    <h1>多股对比</h1>
+    <p class="page-desc">同时对比最多5只股票，一键看清谁更强</p>
+</div>
+
+<div class="compare-input-row">
+    <input type="text" id="compare-input" class="input-search" placeholder="输入股票代码，用逗号分隔，如: 600519,000001,300750" style="flex:1">
+    <button class="btn btn-primary" onclick="loadCompare()">开始对比</button>
+    <button class="btn" onclick="quickCompare()">热门对比</button>
+</div>
+
+<div id="compare-result" class="compare-container">
+    <div class="empty-state" style="padding:60px;">
+        <p style="font-size:16px;margin-bottom:8px;">输入最多5只股票代码，对比关键指标</p>
+        <p style="font-size:12px;color:var(--text-secondary);">对比维度：价格走势、技术指标、估值水平、趋势判断</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadCompare() {
+    const input = document.getElementById('compare-input').value.trim();
+    if (!input) return;
+    await fetchAndRender(input);
+}
+
+async function quickCompare() {
+    document.getElementById('compare-input').value = '600519,000001,300750';
+    await fetchAndRender('600519,000001,300750');
+}
+
+async function fetchAndRender(codes) {
+    const container = document.getElementById('compare-result');
+    container.innerHTML = '<div class="loading">加载对比数据中...</div>';
+
+    try {
+        const resp = await fetch('/api/compare/data?codes=' + encodeURIComponent(codes));
+        const data = await resp.json();
+        const stocks = data.stocks || [];
+
+        let html = '<div class="compare-table-wrap"><table class="compare-table"><thead><tr><th>指标</th>';
+        stocks.forEach(s => {
+            const color = s.change_pct >= 0 ? 'var(--up)' : 'var(--down)';
+            html += `<th><a href="/stock/${s.code}" style="color:${color}">${s.name}<br><small>${s.code}</small></a></th>`;
+        });
+        html += '</tr></thead><tbody>';
+
+        // 行情行
+        html += '<tr><td>最新价</td>' + stocks.map(s => `<td class="${s.change_pct>=0?'price-up':'price-down'}">${s.price.toFixed(2)}</td>`).join('') + '</tr>';
+        html += '<tr><td>涨跌幅</td>' + stocks.map(s => `<td class="${s.change_pct>=0?'price-up':'price-down'}">${s.change_pct>=0?'+':''}${s.change_pct.toFixed(2)}%</td>`).join('') + '</tr>';
+        html += '<tr><td>换手率</td>' + stocks.map(s => `<td>${(s.turnover||0).toFixed(2)}%</td>`).join('') + '</tr>';
+        html += '<tr><td>市盈率</td>' + stocks.map(s => `<td>${(s.pe||0).toFixed(1)}</td>`).join('') + '</tr>';
+
+        // 技术指标行
+        html += '<tr><td><span data-tip="RSI">RSI(14)</span></td>' + stocks.map(s => {
+            const rsi = s.rsi;
+            let cls = ''; let note = '';
+            if (rsi > 70) { cls = 'price-up'; note = ' 超买'; }
+            else if (rsi < 30) { cls = 'price-down'; note = ' 超卖'; }
+            return `<td class="${cls}">${rsi != null ? rsi.toFixed(1)+note : '--'}</td>`;
+        }).join('') + '</tr>';
+
+        html += '<tr><td>趋势判断</td>' + stocks.map(s => {
+            const cls = s.trend_score > 15 ? 'price-down' : s.trend_score < -15 ? 'price-up' : '';
+            return `<td class="${cls}">${s.trend||'--'}<br><small>(${s.trend_score||0}分)</small></td>`;
+        }).join('') + '</tr>';
+
+        html += '<tr><td>MACD信号</td>' + stocks.map(s => `<td>${s.macd_signal||'--'}</td>`).join('') + '</tr>';
+
+        // 强弱势判断
+        html += '<tr style="font-weight:700;"><td>综合判断</td>' + stocks.map(s => {
+            const score = (s.change_pct||0) * 5 + (s.trend_score||0) * 0.5;
+            let verdict, vcls;
+            if (score > 30) { verdict = '★ 最强'; vcls = 'price-up'; }
+            else if (score > 10) { verdict = '偏强'; vcls = 'price-up'; }
+            else if (score > -10) { verdict = '中性'; vcls = ''; }
+            else { verdict = '偏弱'; vcls = 'price-down'; }
+            return `<td class="${vcls}">${verdict}</td>`;
+        }).join('') + '</tr>';
+
+        html += '</tbody></table></div>';
+        container.innerHTML = html;
+    } catch(e) {
+        container.innerHTML = '<div class="empty-state">加载失败: ' + e.message + '</div>';
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,30 @@
+<!-- 新闻列表 —— SSE 局部刷新 -->
+<div id="news-panel" class="news-card">
+    <h3 style="font-size:15px;margin-bottom:10px;">相关新闻</h3>
+    <div id="news-list">
+        <div class="loading">加载新闻中...</div>
+    </div>
+</div>
+
+<script>
+// SSE news 事件处理器
+document.body.addEventListener('htmx:sseMessage', function(evt) {
+    if (evt.detail.type === 'news') {
+        try {
+            const news = JSON.parse(evt.detail.data);
+            const container = document.getElementById('news-list');
+            if (!news.length) {
+                container.innerHTML = '<div class="empty-state">暂无相关新闻</div>';
+                return;
+            }
+            container.innerHTML = news.map(n =>
+                '<div class="news-item">' +
+                (n.url ? '<a href="' + n.url + '" target="_blank" class="news-title">' + n.title + '</a>'
+                       : '<span class="news-title">' + n.title + '</span>') +
+                '<div class="news-meta"><span>' + (n.source || '') + '</span><span>' + (n.time || '') + '</span></div>' +
+                '</div>'
+            ).join('');
+        } catch(e) {}
+    }
+});
+</script>

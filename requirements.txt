@@ -1,0 +1,3 @@
+# 仅记录新建依赖（其他已预装在 daily_stock_analysis conda 环境）
+sse-starlette>=2.0.0
+python-dotenv>=1.0.0

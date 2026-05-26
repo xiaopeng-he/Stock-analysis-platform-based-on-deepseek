@@ -1,0 +1,70 @@
+<!-- 实时价格面板 —— SSE 局部刷新 -->
+<div id="price-panel" class="price-card">
+    <h3 style="margin-bottom:12px;font-size:15px;">实时行情</h3>
+    <div class="price-main">
+        <div class="price-value price-up" id="real-price">--</div>
+        <div class="price-sub">
+            <span id="real-change" class="price-up">--</span>
+            <span style="color:var(--text-secondary);font-size:12px;margin-left:6px;">实时</span>
+        </div>
+    </div>
+    <div class="price-detail-grid">
+        <div class="price-detail-item">
+            <label>开盘</label>
+            <span id="real-open">--</span>
+        </div>
+        <div class="price-detail-item">
+            <label>最高</label>
+            <span id="real-high">--</span>
+        </div>
+        <div class="price-detail-item">
+            <label>最低</label>
+            <span id="real-low">--</span>
+        </div>
+        <div class="price-detail-item">
+            <label>昨收</label>
+            <span id="real-preclose">--</span>
+        </div>
+        <div class="price-detail-item">
+            <label>成交量</label>
+            <span id="real-volume">--</span>
+        </div>
+        <div class="price-detail-item">
+            <label>换手率</label>
+            <span id="real-turnover">--</span>
+        </div>
+    </div>
+</div>
+
+<script>
+// SSE price 事件处理器——更新价格面板
+document.body.addEventListener('htmx:sseMessage', function(evt) {
+    if (evt.detail.type === 'price') {
+        try {
+            const data = JSON.parse(evt.detail.data);
+            const pct = data.change_pct || 0;
+            const colorClass = pct >= 0 ? 'price-up' : 'price-down';
+
+            document.getElementById('real-price').textContent = (data.price || 0).toFixed(2);
+            document.getElementById('real-price').className = 'price-value ' + colorClass;
+
+            const arrow = pct >= 0 ? '↑' : '↓';
+            document.getElementById('real-change').innerHTML = arrow + ' ' + Math.abs(pct).toFixed(2) + '% ' + (data.change_amount || 0).toFixed(2);
+            document.getElementById('real-change').className = colorClass;
+
+            document.getElementById('real-open').textContent = (data.open || 0).toFixed(2);
+            document.getElementById('real-high').textContent = (data.high || 0).toFixed(2);
+            document.getElementById('real-low').textContent = (data.low || 0).toFixed(2);
+            document.getElementById('real-preclose').textContent = (data.pre_close || 0).toFixed(2);
+            document.getElementById('real-volume').textContent = formatVolume(data.volume || 0);
+            document.getElementById('real-turnover').textContent = (data.turnover || 0).toFixed(2) + '%';
+        } catch(e) {}
+    }
+});
+
+function formatVolume(v) {
+    if (v >= 100000000) return (v / 100000000).toFixed(2) + '亿';
+    if (v >= 10000) return (v / 10000).toFixed(0) + '万';
+    return v.toString();
+}
+</script>

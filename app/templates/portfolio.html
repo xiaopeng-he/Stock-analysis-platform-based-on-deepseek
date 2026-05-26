@@ -1,0 +1,333 @@
+{% extends "base.html" %}
+{% block title %}A股智析 - 智能组合{% endblock %}
+{% set active_tab = 'portfolio' %}
+
+{% block head_extra %}
+<style>
+/* Portfolio v2 Styles */
+.portfolio-hero{background:linear-gradient(135deg,#1a1d29 0%,#1e2440 50%,#1a1d29 100%);border:1px solid var(--border);border-radius:14px;padding:28px 32px;margin-bottom:24px;text-align:center}
+.portfolio-hero h1{font-size:26px;font-weight:800;margin-bottom:4px;background:linear-gradient(135deg,#60a5fa,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.portfolio-hero .subtitle{color:var(--text-secondary);font-size:14px;max-width:520px;margin:0 auto}
+.hero-stats{display:flex;justify-content:center;gap:32px;margin-top:16px}
+.hero-stat{text-align:center}
+.hero-stat .val{font-size:20px;font-weight:700}
+.hero-stat .lbl{font-size:11px;color:var(--text-secondary)}
+
+.config-layout{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+@media(max-width:750px){.config-layout{grid-template-columns:1fr}}
+.config-panel{background:var(--card-bg);border:1px solid var(--border);border-radius:14px;padding:20px 24px}
+.config-panel h3{font-size:15px;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.config-panel h3 .icon{font-size:18px}
+
+.capital-display{text-align:center;margin-bottom:14px}
+.capital-display input{border:none;background:transparent;color:var(--text);font-size:36px;font-weight:800;width:180px;text-align:center;outline:none;border-bottom:2px solid var(--accent);padding:4px 0}
+.capital-display .unit{font-size:18px;color:var(--text-secondary);margin-left:4px}
+.quick-amounts{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-bottom:6px}
+.amt-chip{padding:5px 14px;border-radius:20px;font-size:12px;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--text-secondary);transition:all .2s}
+.amt-chip:hover,.amt-chip.active{background:rgba(59,130,246,.12);border-color:var(--accent);color:var(--accent);font-weight:600}
+
+.max-price-row{display:flex;align-items:center;gap:8px;justify-content:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
+.max-price-row label{font-size:12px;color:var(--text-secondary);white-space:nowrap}
+.max-price-row input{width:70px;padding:4px 8px;text-align:center;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:14px;font-weight:600}
+.max-price-row .unit{font-size:12px;color:var(--text-secondary)}
+.capital-hint{font-size:11px;color:var(--text-secondary);text-align:center;margin-top:6px}
+
+.risk-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+@media(max-width:500px){.risk-cards{grid-template-columns:1fr}}
+.risk-card{cursor:pointer;border:2px solid var(--border);border-radius:12px;padding:16px 12px;text-align:center;transition:all .25s;background:var(--bg)}
+.risk-card:hover{border-color:var(--accent);transform:translateY(-2px)}
+.risk-card.active{border-color:var(--accent);background:rgba(59,130,246,.06);box-shadow:0 0 20px rgba(59,130,246,.08)}
+.risk-card .risk-icon{font-size:32px;margin-bottom:6px}
+.risk-card .risk-title{font-size:15px;font-weight:700;margin-bottom:2px}
+.risk-card .risk-sub{font-size:11px;color:var(--text-secondary);line-height:1.5}
+.risk-card .risk-bars{display:flex;gap:2px;justify-content:center;margin-top:6px;height:4px}
+.risk-card .risk-bar{flex:1;border-radius:2px;background:var(--border)}
+.risk-card .risk-bar.filled{background:var(--accent)}
+
+.build-btn-wrap{text-align:center;margin:20px 0}
+.build-btn-main{padding:14px 48px;font-size:16px;font-weight:700;border:none;border-radius:12px;cursor:pointer;background:linear-gradient(135deg,#3b82f6,#8b5cf6);color:#fff;transition:all .3s;box-shadow:0 4px 20px rgba(59,130,246,.25)}
+.build-btn-main:hover{transform:translateY(-1px);box-shadow:0 6px 28px rgba(59,130,246,.35)}
+.build-btn-main:disabled{opacity:.5;transform:none}
+
+.result-container{animation:fadeInUp .4s ease}
+@keyframes fadeInUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+
+.alloc-dashboard{display:grid;grid-template-columns:180px 1fr;gap:20px;background:var(--card-bg);border:1px solid var(--border);border-radius:14px;padding:20px 24px;margin-bottom:16px;align-items:center}
+@media(max-width:650px){.alloc-dashboard{grid-template-columns:1fr}}
+.alloc-ring{position:relative;width:160px;height:160px;margin:0 auto}
+.alloc-ring canvas{width:100%;height:100%}
+.alloc-ring-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center}
+.alloc-ring-center .ring-total{font-size:20px;font-weight:800}
+.alloc-ring-center .ring-label{font-size:10px;color:var(--text-secondary)}
+.alloc-details{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.alloc-detail-item{padding:10px 14px;background:rgba(255,255,255,.02);border-radius:8px}
+.alloc-detail-item .ad-label{font-size:10px;color:var(--text-secondary);margin-bottom:2px}
+.alloc-detail-item .ad-val{font-size:16px;font-weight:700}
+.alloc-detail-item .ad-sub{font-size:11px;color:var(--text-secondary)}
+
+.position-card-v2{background:var(--card-bg);border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin-bottom:10px;transition:all .2s;position:relative;overflow:hidden}
+.position-card-v2:hover{border-color:var(--accent)}
+.position-card-v2::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px}
+.position-card-v2.type-low::before{background:var(--down)}
+.position-card-v2.type-mid::before{background:var(--accent)}
+.position-card-v2.type-high::before{background:var(--up)}
+.pos-v2-header{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.pos-v2-idx{font-size:20px;font-weight:800;color:var(--accent);min-width:28px}
+.pos-v2-name{font-weight:700;font-size:15px}.pos-v2-name:hover{color:var(--accent)}
+.pos-v2-code{font-size:11px;color:var(--text-secondary);margin-left:4px}
+.pos-v2-badge{font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600;margin-left:auto}
+.badge-def{background:rgba(71,178,98,.1);color:var(--down)}
+.badge-growth{background:rgba(59,130,246,.1);color:var(--accent)}
+.badge-hot{background:rgba(236,90,90,.1);color:var(--up)}
+.pos-v2-body{display:grid;grid-template-columns:auto 1fr;gap:12px 20px}
+@media(max-width:550px){.pos-v2-body{grid-template-columns:1fr}}
+.pos-v2-price-block{text-align:center;padding:8px 12px;background:rgba(255,255,255,.02);border-radius:8px;min-width:90px}
+.pos-v2-price{font-size:22px;font-weight:800}
+.pos-v2-change{font-size:12px;margin-top:2px}
+.pos-v2-meta{display:flex;flex-direction:column;gap:6px}
+.pos-v2-meta-row{display:flex;gap:14px;flex-wrap:wrap;font-size:12px}
+.pos-v2-meta-row span{color:var(--text-secondary)}
+.pos-v2-meta-row strong{color:var(--text)}
+.pos-v2-strat{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;padding:8px 12px;background:rgba(255,255,255,.015);border-radius:8px;font-size:11px;margin-top:4px}
+.pos-v2-strat .s-label{color:var(--text-secondary)}
+.pos-v2-strat .s-val{font-weight:500;text-align:right}
+.pos-v2-reason{font-size:11px;color:var(--text-secondary);line-height:1.6;margin-top:6px;padding:6px 10px;background:rgba(59,130,246,.03);border-radius:6px}
+
+.section-title{font-size:16px;font-weight:700;margin:20px 0 10px;display:flex;align-items:center;gap:8px}
+.section-title .dot{width:6px;height:6px;border-radius:50%;background:var(--accent)}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="portfolio-hero">
+    <h1>智能投资组合</h1>
+    <p class="subtitle">输入资金 → 选择风格 → AI 自动构建完整投资方案。买什么、买多少、何时止损止盈，全部帮你算好。</p>
+    <div class="hero-stats">
+        <div class="hero-stat"><div class="val" style="color:var(--accent);">27</div><div class="lbl">API路由</div></div>
+        <div class="hero-stat"><div class="val" style="color:#a78bfa;">7维</div><div class="lbl">分析维度</div></div>
+        <div class="hero-stat"><div class="val" style="color:var(--down);">6因子</div><div class="lbl">选股模型</div></div>
+    </div>
+</div>
+
+<div class="config-layout">
+    <!-- 左: 资金配置 -->
+    <div class="config-panel">
+        <h3><span class="icon">💰</span> 资金设置</h3>
+        <div class="capital-display">
+            <input type="number" id="capital-input" value="50000" min="1000" step="1000">
+            <span class="unit">元</span>
+        </div>
+        <div class="quick-amounts">
+            <button class="amt-chip" onclick="setCapital(1000)">1千</button>
+            <button class="amt-chip" onclick="setCapital(5000)">5千</button>
+            <button class="amt-chip" onclick="setCapital(10000)">1万</button>
+            <button class="amt-chip active" onclick="setCapital(50000)">5万</button>
+            <button class="amt-chip" onclick="setCapital(100000)">10万</button>
+            <button class="amt-chip" onclick="setCapital(200000)">20万</button>
+            <button class="amt-chip" onclick="setCapital(500000)">50万</button>
+        </div>
+        <div class="max-price-row">
+            <label>单股价 ≤</label>
+            <input type="number" id="max-price-input" value="0" min="0" step="1" placeholder="不限">
+            <span class="unit">元/股</span>
+            <span style="font-size:10px;color:var(--text-secondary);">(0=不限)</span>
+        </div>
+        <div class="capital-hint" id="max-price-hint">1手=100股。建议每股上限 ≤ 单只配置额 ÷ 100</div>
+        <div id="capital-warning" class="capital-warning" style="display:none;"></div>
+    </div>
+
+    <!-- 右: 风险偏好 -->
+    <div class="config-panel">
+        <h3><span class="icon">🎯</span> 风险偏好</h3>
+        <div class="risk-cards">
+            <div class="risk-card active" data-risk="保守" onclick="selectRisk('保守', this)">
+                <div class="risk-icon">🛡️</div>
+                <div class="risk-title">保守型</div>
+                <div class="risk-sub">蓝筹为主<br>最大回撤 ≤5%</div>
+                <div class="risk-bars"><div class="risk-bar filled"></div><div class="risk-bar"></div><div class="risk-bar"></div></div>
+            </div>
+            <div class="risk-card" data-risk="稳健" onclick="selectRisk('稳健', this)">
+                <div class="risk-icon">⚖️</div>
+                <div class="risk-title">稳健型</div>
+                <div class="risk-sub">蓝筹 + 成长<br>最大回撤 ≤10%</div>
+                <div class="risk-bars"><div class="risk-bar filled"></div><div class="risk-bar filled"></div><div class="risk-bar"></div></div>
+            </div>
+            <div class="risk-card" data-risk="进取" onclick="selectRisk('进取', this)">
+                <div class="risk-icon">🚀</div>
+                <div class="risk-title">进取型</div>
+                <div class="risk-sub">成长 + 热点<br>最大回撤 ≤15%</div>
+                <div class="risk-bars"><div class="risk-bar filled"></div><div class="risk-bar filled"></div><div class="risk-bar filled"></div></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="build-btn-wrap">
+    <button class="build-btn-main" id="build-btn" onclick="buildPortfolio()">✨ 构建我的投资组合</button>
+</div>
+
+<div id="build-progress" class="progress-bar-container hidden">
+    <div class="progress-bar"><div class="progress-fill" id="build-fill"></div></div>
+    <p id="build-msg">正在分析市场...</p>
+</div>
+
+<div id="portfolio-result"></div>
+{% endblock %}
+
+{% block scripts %}
+{% raw %}
+<script>
+let selectedRisk = '稳健';
+
+function setCapital(val) {
+    document.getElementById('capital-input').value = val;
+    document.querySelectorAll('.amt-chip').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+    checkCapital();
+}
+function selectRisk(risk, btn) {
+    selectedRisk = risk;
+    document.querySelectorAll('.risk-card').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+}
+document.getElementById('capital-input').addEventListener('input', checkCapital);
+function checkCapital() {
+    const capital = parseInt(document.getElementById('capital-input').value) || 50000;
+    const w = document.getElementById('capital-warning');
+    const h = document.getElementById('max-price-hint');
+    const s = Math.floor(capital * 0.2 / 100);
+    h.textContent = `1手=100股。建议每股 ≤ ${s}元（可买${Math.floor(capital/(s*100))||1}手）。最多买得起${Math.floor(capital/100)}元/股的股票`;
+    if(capital<3000){w.style.display='block';w.innerHTML=`<span style="color:#f59e0b">⚠ 小资金(${capital}元)</span> 必须设单股价上限，精选2只即可`}
+    else if(capital<10000){w.style.display='block';w.innerHTML=`<span style="color:var(--accent)">小资金(${capital}元)</span> 建议上限≤${s}元，选3-4只`}
+    else{w.style.display='none'}
+}
+
+async function buildPortfolio() {
+    const capital = parseInt(document.getElementById('capital-input').value) || 50000;
+    const maxPrice = parseFloat(document.getElementById('max-price-input').value) || 0;
+    if(capital<1000){alert('资金至少1000元');return}
+    if(maxPrice>0 && maxPrice*100>capital){alert(`单股价${maxPrice}元×100股=${maxPrice*100}元/手 > 总资金${capital}元，买不起！`);return}
+    const btn=document.getElementById('build-btn');btn.disabled=true;btn.textContent='⏳ AI分析中...';
+    document.getElementById('build-progress').classList.remove('hidden');
+    document.getElementById('portfolio-result').innerHTML='';
+    let prog=0;
+    const msgs=['采集市场数据...','筛选买得起的标的...','量化多因子评估...','计算最优仓位分配...','生成投资方案...'];
+    const timer=setInterval(()=>{prog=Math.min(prog+16,90);document.getElementById('build-fill').style.width=prog+'%';document.getElementById('build-msg').textContent=msgs[Math.floor(prog/20)]||'...'},400);
+    try{
+        let url=`/api/portfolio/build?capital=${capital}&risk=${selectedRisk}`;
+        if(maxPrice>0)url+=`&max_price=${maxPrice}`;
+        const resp=await fetch(url);const data=await resp.json();
+        clearInterval(timer);document.getElementById('build-fill').style.width='100%';document.getElementById('build-msg').textContent='✅ 完成';
+        setTimeout(()=>document.getElementById('build-progress').classList.add('hidden'),500);
+        renderPortfolio(data);
+    }catch(e){clearInterval(timer);document.getElementById('build-progress').classList.add('hidden');document.getElementById('portfolio-result').innerHTML=`<div class="empty-state">请求失败: ${e.message}</div>`}
+    btn.disabled=false;btn.textContent='✨ 构建我的投资组合';
+}
+
+function renderPortfolio(data){
+    if(data.error){document.getElementById('portfolio-result').innerHTML=`<div class="empty-state" style="padding:40px"><p style="font-size:16px;color:var(--up)">${data.error}</p></div>`;return}
+    const alloc=data.allocation||{},cap=alloc.total_capital||0,invested=alloc.invested_amount||0,cash=alloc.cash_reserve||0;
+    const invPct=cap?Math.round(invested/cap*100):0,cashPct=cap?Math.round(cash/cap*100):0;
+    let html=`<div class="result-container">`;
+
+    // 市场判断
+    if(data.market_judgment)html+=`<div class="market-judgment"><h3>📊 市场环境</h3><p>${data.market_judgment}</p></div>`;
+
+    // 资金分配仪表盘
+    html+=`<div class="alloc-dashboard">
+        <div class="alloc-ring"><canvas id="alloc-canvas"></canvas><div class="alloc-ring-center"><div class="ring-total">${cap.toLocaleString()}</div><div class="ring-label">总资金(元)</div></div></div>
+        <div class="alloc-details">
+            <div class="alloc-detail-item"><div class="ad-label">📈 投入股市</div><div class="ad-val" style="color:var(--accent)">${invested.toLocaleString()}元</div><div class="ad-sub">占${invPct}%</div></div>
+            <div class="alloc-detail-item"><div class="ad-label">💰 现金保留</div><div class="ad-val" style="color:var(--down)">${cash.toLocaleString()}元</div><div class="ad-sub">占${cashPct}%</div></div>
+            <div class="alloc-detail-item"><div class="ad-label">📊 预期收益</div><div class="ad-val price-up">${alloc.expected_return||'--'}</div></div>
+            <div class="alloc-detail-item"><div class="ad-label">🛡️ 最大回撤</div><div class="ad-val price-down">${alloc.max_drawdown_estimate||'--'}</div></div>
+        </div>
+    </div>`;
+
+    // 持仓列表
+    const positions=data.positions||[];
+    if(positions.length){
+        html+=`<div class="section-title"><span class="dot"></span>持仓明细 · 照做即可</div>`;
+        positions.forEach((p,i)=>{
+            const price=p.current_price||0,shares=p.suggested_shares||0,cost=p.actual_cost||price*shares;
+            const change=p.current_change||0,colorCls=change>=0?'price-up':'price-down',arrow=change>=0?'↑':'↓';
+            const typeCls=p.type==='蓝筹防守'?'badge-def':p.type==='成长白马'?'badge-growth':'badge-hot';
+            const typeLabel=p.type||'标的';
+            const riskEmoji=p.risk_level==='低'?'🟢':p.risk_level==='中'?'🟡':'🔴';
+            const riskCls=p.risk_level==='低'?'type-low':p.risk_level==='中'?'type-mid':'type-high';
+            html+=`<div class="position-card-v2 ${riskCls}">
+                <div class="pos-v2-header">
+                    <span class="pos-v2-idx">#${i+1}</span>
+                    <a href="/stock/${p.code}" class="pos-v2-name">${p.name||'--'}</a>
+                    <span class="pos-v2-code">${p.code}</span>
+                    <span class="pos-v2-badge ${typeCls}">${typeLabel}</span>
+                    <span style="font-size:11px">${riskEmoji} ${p.risk_level||'--'}风险</span>
+                </div>
+                <div class="pos-v2-body">
+                    <div class="pos-v2-price-block">
+                        <div class="pos-v2-price ${colorCls}">${price.toFixed(2)}</div>
+                        <div class="pos-v2-change ${colorCls}">${arrow}${Math.abs(change).toFixed(2)}%</div>
+                    </div>
+                    <div>
+                        <div class="pos-v2-meta">
+                            <div class="pos-v2-meta-row"><span>配置</span> <strong>${p.allocation_pct||0}%</strong> <span>|</span> <span>买入</span> <strong style="color:var(--accent);font-size:14px">${shares}股</strong> <span>(${p.lots||Math.floor(shares/100)}手)</span> <span>|</span> <span>约</span> <strong>${cost.toLocaleString()}元</strong></div>
+                        </div>
+                        <div class="pos-v2-strat">
+                            <span class="s-label">入场区间</span><span class="s-val">${p.entry_zone||'--'}</span>
+                            <span class="s-label">止损位</span><span class="s-val price-down">${p.stop_loss||'--'} <small>(${p.stop_loss_pct||0}%)</small></span>
+                            <span class="s-label">目标① (减半仓)</span><span class="s-val price-up">${p.target_1||'--'} <small>(+${p.target_1_pct||0}%)</small></span>
+                            <span class="s-label">目标② (清仓)</span><span class="s-val price-up">${p.target_2||'--'} <small>(+${p.target_2_pct||0}%)</small></span>
+                        </div>
+                        <div class="pos-v2-reason">💡 ${p.reason||''}</div>
+                        ${p.operation?`<div style="font-size:11px;color:var(--accent);margin-top:4px;padding:4px 8px;background:rgba(59,130,246,.04);border-radius:4px">📋 ${p.operation}</div>`:''}
+                    </div>
+                </div>
+            </div>`;
+        });
+    }
+
+    // 风控
+    const rc=data.risk_controls||{};
+    if(Object.keys(rc).length)html+=`<div class="risk-controls"><h4>🛡️ 风控规则</h4><div class="rc-grid">${['portfolio_stop_loss','portfolio_take_profit','daily_max_loss','rebalance_rule'].map(k=>`<div class="rc-item"><span class="rc-label">${{portfolio_stop_loss:'组合止损线',portfolio_take_profit:'止盈策略',daily_max_loss:'单日最大亏损',rebalance_rule:'调仓规则'}[k]}</span><span class="rc-val ${k.includes('stop')||k.includes('loss')?'price-down':''}">${rc[k]||'--'}</span></div>`).join('')}</div></div>`;
+
+    if(data.beginner_guide)html+=`<div class="beginner-tip"><span class="tip-icon">📌 傻瓜式总结</span><p>${data.beginner_guide}</p></div>`;
+    if(data.disclaimer)html+=`<p style="font-size:10px;color:var(--text-secondary);text-align:center;margin-top:10px">${data.disclaimer}</p>`;
+    if(data.generated_at)html+=`<p style="font-size:10px;color:var(--text-secondary);text-align:center">⏱ ${data.generated_at} | Token:${data.token_usage||'--'} | ${data.cached?'缓存':'实时分析'}</p>`;
+
+    html+=`<div class="action-bar"><button class="btn btn-primary" onclick="buildPortfolio()">🔄 重新构建</button><button class="btn-outline" onclick="copyPortfolio()">📋 复制方案</button><button class="btn-outline" onclick="exportPortfolio()">📥 导出文本</button></div></div>`;
+    document.getElementById('portfolio-result').innerHTML=html;
+
+    // 绘制环形图
+    setTimeout(()=>{
+        const canvas=document.getElementById('alloc-canvas');
+        if(!canvas)return;
+        const ctx=canvas.getContext('2d'),W=160,H=160,cx=80,cy=80,r=60,lw=16;
+        canvas.width=W*2;canvas.height=H*2;ctx.scale(2,2);
+        const drawArc=(startAngle,endAngle,color)=>{
+            ctx.beginPath();ctx.arc(cx,cy,r,startAngle,endAngle);ctx.lineWidth=lw;ctx.strokeStyle=color;ctx.lineCap='round';ctx.stroke();
+        };
+        ctx.clearRect(0,0,W,H);
+        // 背景环
+        ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.lineWidth=lw;ctx.strokeStyle='var(--border)';ctx.stroke();
+        const totalAngle=Math.PI*2*(invPct/100);
+        drawArc(-Math.PI/2,-Math.PI/2+totalAngle,'#3b82f6');
+        if(cashPct>0)drawArc(-Math.PI/2+totalAngle,-Math.PI/2+Math.PI*2,'#47b262');
+    },100);
+
+    try{const h=JSON.parse(localStorage.getItem('portfolio_history')||'[]');h.unshift({ts:new Date().toISOString(),capital:cap,risk:data.risk_profile,summary:data.market_judgment?.slice(0,60)});localStorage.setItem('portfolio_history',JSON.stringify(h.slice(0,10)))}catch(e){}
+    window._lastPortfolio=data;
+}
+
+function copyPortfolio(){
+    const d=window._lastPortfolio;if(!d)return;
+    let t=`【A股智析 智能组合】\n资金:${(d.allocation?.total_capital||0).toLocaleString()}元 | ${d.risk_profile||''}型\n\n`;(d.positions||[]).forEach((p,i)=>{t+=`${i+1}.${p.name}(${p.code}) ${p.type||''}\n  现价${p.current_price||0} 买${p.suggested_shares||0}股(${p.lots||0}手)≈${p.actual_cost||0}元\n  止损${p.stop_loss||'--'} 目标${p.target_1||'--'}→${p.target_2||'--'}\n`});t+=`\n${d.beginner_guide||''}`;
+    navigator.clipboard.writeText(t).then(()=>showToast('已复制','success')).catch(()=>showToast('复制失败','error'));
+}
+function exportPortfolio(){
+    const d=window._lastPortfolio;if(!d)return;
+    let t=`A股智析 投资组合\n${'='.repeat(40)}\n\n资金:${(d.allocation?.total_capital||0).toLocaleString()}元 | ${d.risk_profile||''}型\n\n【市场研判】\n${d.market_judgment||''}\n\n【持仓】\n`;(d.positions||[]).forEach((p,i)=>{t+=`\n${i+1}.${p.name}(${p.code}) ${p.type||''}\n  买${p.suggested_shares||0}股×${p.current_price||0}≈${p.actual_cost||0}元\n  入场:${p.entry_zone||'--'} 止损:${p.stop_loss||'--'} 目标:${p.target_1||'--'}→${p.target_2||'--'}\n`});t+=`\n${d.beginner_guide||''}\n${d.disclaimer||''}`;
+    const b=new Blob([t],{type:'text/plain;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=`组合_${new Date().toISOString().slice(0,10)}.txt`;a.click();showToast('已下载','success');
+}
+</script>
+{% endraw %}
+{% endblock %}

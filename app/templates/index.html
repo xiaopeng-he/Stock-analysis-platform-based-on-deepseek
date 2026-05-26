@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+{% block title %}A股智析 - 首页{% endblock %}
+{% set active_tab = 'home' %}
+
+{% block content %}
+<!-- 新手欢迎条 -->
+<div class="welcome-bar" id="welcome-bar">
+    <span><strong>新手入门</strong> — 已自动预置6只热门股票，点击卡片查看实时分析和AI推荐。将鼠标悬停到术语上可查看解释。</span>
+    <button class="welcome-close" onclick="document.getElementById('welcome-bar').remove()">&times;</button>
+</div>
+
+<!-- 顶部操作栏 -->
+<div class="page-header">
+    <h1>我的自选股</h1>
+    <div class="header-actions">
+        <a href="/recommend" class="btn btn-accent">AI 一键推荐</a>
+        <button class="btn btn-primary" onclick="document.getElementById('add-stock-modal').classList.remove('hidden')">
+            + 添加自选股
+        </button>
+    </div>
+</div>
+
+<!-- 市场速览栏 -->
+<div class="market-strip" id="market-strip">
+    <div class="strip-indices" id="strip-indices">
+        <span class="nav-hint">加载大盘数据中...</span>
+    </div>
+    <div class="strip-stats">
+        <span id="strip-breadth"></span>
+        <span id="strip-north"></span>
+    </div>
+</div>
+
+<!-- 添加自选股弹窗 -->
+<div id="add-stock-modal" class="modal hidden">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>添加自选股</h3>
+            <button class="btn-close" onclick="document.getElementById('add-stock-modal').classList.add('hidden')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <input
+                type="text"
+                id="search-input"
+                class="input-search"
+                placeholder="输入股票名称或代码搜索..."
+                autocomplete="off"
+                hx-get="/api/search"
+                hx-trigger="keyup changed delay:300ms"
+                hx-target="#search-results"
+                hx-include="#search-input"
+            >
+            <div id="search-results" class="search-results"></div>
+        </div>
+    </div>
+</div>
+
+<!-- 自选股列表 -->
+<div id="watchlist-container"
+     hx-get="/api/watchlist/list?sort=default"
+     hx-trigger="load, every 15s"
+     hx-indicator="#watchlist-loading">
+    <div class="loading">加载中...</div>
+</div>
+<div id="watchlist-loading" class="htmx-indicator" style="display:none;text-align:center;padding:4px;color:var(--text-secondary);font-size:12px;">刷新中...</div>
+
+<script>
+// 排序
+function sortWatchlist(sort) {
+    const container = document.getElementById('watchlist-container');
+    container.setAttribute('hx-get', '/api/watchlist/list?sort=' + sort);
+    htmx.trigger(container, 'load');
+}
+
+// 页面隐藏时停止轮询，可见时恢复
+let _watchlistInterval;
+document.addEventListener('visibilitychange', function() {
+    const container = document.getElementById('watchlist-container');
+    if (document.hidden) {
+        container.setAttribute('hx-trigger', 'load');  // 停止轮询
+    } else {
+        container.setAttribute('hx-trigger', 'load, every 15s');
+        htmx.trigger(container, 'load');  // 立即刷新一次
+    }
+});
+</script>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+<!-- 持仓编辑弹窗 -->
+<div id="position-modal" class="modal hidden">
+    <div class="modal-content" style="width:380px;">
+        <div class="modal-header">
+            <h3 id="position-title">编辑持仓</h3>
+            <button class="btn-close" onclick="document.getElementById('position-modal').classList.add('hidden')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <label style="font-size:13px;color:var(--text-secondary);">买入成本价（元）</label>
+            <input type="number" id="pos-price" class="input-search" step="0.01" placeholder="例如: 50.00">
+            <label style="font-size:13px;color:var(--text-secondary);margin-top:10px;display:block;">持仓数量（股）</label>
+            <input type="number" id="pos-shares" class="input-search" step="100" placeholder="例如: 1000">
+            <label style="font-size:13px;color:var(--text-secondary);margin-top:10px;display:block;">个人备注</label>
+            <input type="text" id="pos-notes" class="input-search" placeholder="买入理由、观察要点...">
+            <button class="btn btn-primary" style="width:100%;margin-top:12px;" onclick="savePosition()">保存</button>
+            <button class="btn" style="width:100%;margin-top:6px;background:transparent;border:1px solid var(--border);" onclick="clearPosition()">清除持仓</button>
+        </div>
+    </div>
+</div>
+
+<script>
+let _editCode = '';
+
+function editPosition(code, name, price, shares) {
+    _editCode = code;
+    document.getElementById('position-title').textContent = name + ' (' + code + ')';
+    document.getElementById('pos-price').value = price || '';
+    document.getElementById('pos-shares').value = shares || '';
+    document.getElementById('pos-notes').value = '';
+    document.getElementById('position-modal').classList.remove('hidden');
+}
+
+async function savePosition() {
+    const price = parseFloat(document.getElementById('pos-price').value) || 0;
+    const shares = parseInt(document.getElementById('pos-shares').value) || 0;
+    const notes = document.getElementById('pos-notes').value || '';
+    await fetch('/api/watchlist/' + _editCode + '/position', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entry_price: price, shares: shares, notes: notes }),
+    });
+    document.getElementById('position-modal').classList.add('hidden');
+    if (typeof showToast === 'function') showToast('持仓已更新', 'success');
+    // 刷新自选列表
+    document.getElementById('watchlist-container').setAttribute('hx-trigger', 'load');
+    htmx.trigger('#watchlist-container', 'load');
+}
+
+async function clearPosition() {
+    document.getElementById('pos-price').value = '0';
+    document.getElementById('pos-shares').value = '0';
+    await savePosition();
+}
+
+// ── 键盘快捷键 ──
+document.addEventListener('keydown', function(e) {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    switch(e.key) {
+        case 'h': window.location.href = '/'; break;        // 首页
+        case 'r': window.location.href = '/recommend'; break; // 推荐
+        case 'c': window.location.href = '/compare'; break;   // 对比
+        case 'b': window.location.href = '/beginners'; break; // 新手
+        case 'a': document.getElementById('add-stock-modal')?.classList.remove('hidden'); break; // 添加
+        case 'Escape':
+            document.getElementById('add-stock-modal')?.classList.add('hidden');
+            document.getElementById('position-modal')?.classList.add('hidden');
+            break;
+    }
+    if (e.ctrlKey && e.key === 'k') {
+        e.preventDefault();
+        document.getElementById('search-input')?.focus();
+        document.getElementById('add-stock-modal')?.classList.remove('hidden');
+    }
+});
+</script>
+
+// 加载大盘速览
+(async function() {
+    try {
+        const resp = await fetch('/api/market/snapshot');
+        const data = await resp.json();
+
+        // 大盘指数
+        let idxHtml = '';
+        for (const [name, idx] of Object.entries(data.indices || {})) {
+            const color = idx.change_pct >= 0 ? 'var(--up)' : 'var(--down)';
+            const arrow = idx.change_pct >= 0 ? '↑' : '↓';
+            idxHtml += `<span class="strip-idx-item">${name} <span style="font-weight:600;color:${color}">${idx.price.toFixed(2)} <small>${arrow}${Math.abs(idx.change_pct).toFixed(2)}%</small></span></span>`;
+        }
+        document.getElementById('strip-indices').innerHTML = idxHtml || '加载中...';
+
+        // 涨跌比
+        try {
+            const br = await fetch('/api/market/breadth');
+            const breadth = await br.json();
+            document.getElementById('strip-breadth').innerHTML =
+                `<span style="color:var(--up)">涨${breadth.up_ratio||50}%</span>/<span style="color:var(--down)">跌${breadth.down_ratio||50}%</span>`;
+        } catch(e) {}
+
+        // 资金面
+        const nf = data.north_flow || {};
+        document.getElementById('strip-north').innerHTML =
+            `北向 <span style="color:${(nf.today||0)>=0?'var(--up)':'var(--down)'}">${(nf.today||0).toFixed(0)}亿</span>`;
+
+        // 同步更新导航栏大盘
+        if (data.indices && Object.keys(data.indices).length) {
+            let brief = '';
+            for (const [name, idx] of Object.entries(data.indices)) {
+                const color = idx.change_pct >= 0 ? 'var(--up)' : 'var(--down)';
+                const arrow = idx.change_pct >= 0 ? '↑' : '↓';
+                brief += `<span class="market-item">${name} <span style="color:${color}">${idx.price.toFixed(2)} ${arrow}${Math.abs(idx.change_pct).toFixed(2)}%</span></span>`;
+            }
+            document.getElementById('market-brief').innerHTML = brief;
+        }
+    } catch(e) {
+        console.log('Market strip load error:', e);
+    }
+})();
+</script>
+{% endblock %}

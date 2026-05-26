@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% block title %}{{ stock_name }}({{ stock_code }}) - A股智析{% endblock %}
+
+{% block content %}
+<div class="stock-detail">
+    <!-- 返回 + 股票信息头 -->
+    <div class="stock-header">
+        <a href="/" class="btn-back">&larr; 返回</a>
+        <div class="stock-title">
+            <h2>{{ stock_name }} <span class="stock-code">{{ stock_code }}</span></h2>
+        </div>
+    </div>
+
+    <!-- SSE 连接状态 -->
+    <div class="sse-status" id="sse-status">
+        <span class="dot"></span> 实时连接中...
+    </div>
+
+    <div class="stock-grid">
+        <!-- 左侧：实时价格 + 分析面板 -->
+        <div class="grid-left">
+            <!-- 实时价格面板 -->
+            <div hx-ext="sse" sse-connect="/api/stream?code={{ stock_code }}" sse-swap="price" hx-swap="innerHTML">
+                {% include "partials/price_panel.html" %}
+            </div>
+
+            <!-- AI 分析面板 -->
+            <div hx-ext="sse" sse-connect="/api/stream?code={{ stock_code }}" sse-swap="analysis" hx-swap="innerHTML">
+                {% include "partials/analysis_panel.html" %}
+            </div>
+
+            <!-- 扩展技术指标面板 -->
+            <div id="extra-indicators-panel" class="chart-card" style="margin-top:12px;">
+                <h4 style="margin-bottom:10px;font-size:14px;">扩展技术指标</h4>
+                <div id="extra-indicators-grid" class="extra-indicators">
+                    <div class="loading" style="grid-column:1/-1">等待数据加载...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧：K线图 + 新闻 -->
+        <div class="grid-right">
+            <!-- K 线图 -->
+            <div class="chart-card">
+                <div class="chart-toolbar">
+                    <span>K线图 <small style="color:var(--text-secondary);font-weight:400;" id="kline-period-label">5分钟</small></span>
+                    <div class="period-btns-enhanced">
+                        <button class="period-btn-enhanced" data-period="1">1分</button>
+                        <button class="period-btn-enhanced active" data-period="5">5分</button>
+                        <button class="period-btn-enhanced" data-period="15">15分</button>
+                        <button class="period-btn-enhanced" data-period="30">30分</button>
+                        <button class="period-btn-enhanced" data-period="60">60分</button>
+                        <button class="period-btn-enhanced" data-period="daily">日K</button>
+                    </div>
+                </div>
+                <div id="kline-chart" style="height:400px;"></div>
+            </div>
+
+            <!-- 新闻列表 -->
+            <div hx-ext="sse" sse-connect="/api/stream?code={{ stock_code }}" sse-swap="news" hx-swap="innerHTML">
+                {% include "partials/news_list.html" %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/sse_client.js"></script>
+<script src="/static/js/chart.js"></script>
+<script>
+// 初始化 K 线图
+let currentPeriod = '5';
+initKlineChart('{{ stock_code }}', currentPeriod);
+
+// 切换周期
+document.querySelectorAll('.period-btn-enhanced').forEach(btn => {
+    btn.addEventListener('click', function() {
+        document.querySelectorAll('.period-btn-enhanced').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        currentPeriod = this.dataset.period;
+        document.getElementById('kline-period-label').textContent =
+            {1:'1分钟',5:'5分钟',15:'15分钟',30:'30分钟',60:'60分钟',daily:'日K'}[currentPeriod] || currentPeriod;
+        initKlineChart('{{ stock_code }}', currentPeriod);
+    });
+});
+
+// 加载扩展技术指标
+(async function loadExtraIndicators() {
+    try {
+        const resp = await fetch('/api/stock/{{ stock_code }}/kline?period=5');
+        const data = await resp.json();
+        if (!data.klines || data.klines.length < 10) return;
+
+        // 前端计算关键数值（简化版）
+        const closes = data.klines.map(k => k.close);
+        const highs = data.klines.map(k => k.high);
+        const lows = data.klines.map(k => k.low);
+        const volumes = data.klines.map(k => k.volume || 0);
+        const n = closes.length;
+
+        const sma = (arr, p) => arr.slice(-p).reduce((a,b)=>a+b,0)/p;
+        const ema = (prev, cur, p) => cur * (2/(p+1)) + prev * (1-2/(p+1));
+        const cur = closes[n-1];
+
+        // OBV
+        let obv = 0;
+        for (let i=1;i<Math.min(n,60);i++) {
+            const idx = n-1-i;
+            obv += closes[idx] > closes[idx-1] ? volumes[idx] : closes[idx] < closes[idx-1] ? -volumes[idx] : 0;
+        }
+
+        // CCI
+        const tp = [];
+        for (let i=0;i<n;i++) tp.push((highs[i]+lows[i]+closes[i])/3);
+        const tp14 = tp.slice(-14);
+        const tpMa = tp14.reduce((a,b)=>a+b,0)/14;
+        const tpMd = tp14.reduce((a,b)=>a+Math.abs(b-tpMa),0)/14;
+        const cci = tpMd > 0 ? ((tp[n-1]-tpMa)/(0.015*tpMd)).toFixed(1) : '0';
+
+        // WR
+        const h14 = Math.max(...highs.slice(-14));
+        const l14 = Math.min(...lows.slice(-14));
+        const wr = h14 !== l14 ? ((h14 - cur)/(h14 - l14)*100).toFixed(1) : '50';
+
+        // 支撑阻力
+        const allHighs = highs.slice(-60), allLows = lows.slice(-60);
+        const res = Math.max(...allHighs.slice(-20));
+        const sup = Math.min(...allLows.slice(-20));
+
+        document.getElementById('extra-indicators-grid').innerHTML = `
+            <div class="extra-ind-item">
+                <div class="extra-ind-name">OBV 能量潮</div>
+                <div class="extra-ind-val">${(obv/10000).toFixed(0)}万</div>
+                <div class="extra-ind-sig ${obv>0?'bullish':'bearish'}">${obv>0?'积累中':'流出中'}</div>
+            </div>
+            <div class="extra-ind-item">
+                <div class="extra-ind-name">CCI 顺势指标</div>
+                <div class="extra-ind-val">${cci}</div>
+                <div class="extra-ind-sig ${Number(cci)>100?'bearish':Number(cci)<-100?'bullish':'neutral_sig'}">${Number(cci)>100?'强势':Number(cci)<-100?'弱势超卖':'正常'}</div>
+            </div>
+            <div class="extra-ind-item">
+                <div class="extra-ind-name">WR 威廉指标</div>
+                <div class="extra-ind-val">${wr}</div>
+                <div class="extra-ind-sig ${Number(wr)>80?'bullish':Number(wr)<20?'bearish':'neutral_sig'}">${Number(wr)>80?'超卖':Number(wr)<20?'超买':'正常'}</div>
+            </div>
+            <div class="extra-ind-item">
+                <div class="extra-ind-name">支撑/阻力</div>
+                <div class="extra-ind-val">${sup.toFixed(2)} / ${res.toFixed(2)}</div>
+                <div class="extra-ind-sig neutral_sig">距支撑${((cur-sup)/cur*100).toFixed(1)}% | 距阻力${((res-cur)/cur*100).toFixed(1)}%</div>
+            </div>
+        `;
+    } catch(e) { console.warn('Extra indicators load error:', e); }
+})();
+
+// 价格变动闪烁
+const priceEl = document.getElementById('real-price');
+if (priceEl) {
+    const observer = new MutationObserver(() => {
+        priceEl.classList.add('price-flash');
+        setTimeout(() => priceEl.classList.remove('price-flash'), 600);
+    });
+    observer.observe(priceEl, { characterData: true, subtree: true });
+}
+</script>
+{% endblock %}
