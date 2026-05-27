@@ -102,6 +102,7 @@ class PortfolioService:
             # 小资金：放宽到1手≤总资金即可（允许单只满仓）
             max_lot_ratio = 1.0 if capital <= 3000 else 0.5 if capital <= 10000 else 0.25
 
+            candidates = []
             for code, q in all_quotes.items():
                 price = q.get("price", 0)
                 if price <= 0:
