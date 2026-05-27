@@ -390,14 +390,18 @@ def build_portfolio_prompt(market_data: dict, capital: float, risk_profile: str,
 
     # 资金量级提示
     max_price_constraint = f"**单股价上限: ≤{max_price:.0f}元/股**，即1手≤{max_price*100:.0f}元。" if max_price > 0 else ""
-    if capital <= 5000:
-        capital_note = f"⚠️ 资金仅{capital:.0f}元。{max_price_constraint}精选2-3只股票即可。"
+    if capital <= 2000:
+        capital_note = (f"⚠️ 资金仅{capital:.0f}元，属于极小资金。{max_price_constraint}"
+                        f"**只能买1-2只股票**，建议全仓1只最看好的低价股。A股1手=100股，最多买得起{capital/100:.0f}元/股的股票。"
+                        f"不要试图分散——集中火力才能让小资金成长。严格止损-5%。")
+    elif capital <= 5000:
+        capital_note = f"资金{capital:.0f}元，小资金。{max_price_constraint}精选1-2只即可，不要过度分散。"
     elif capital <= 20000:
-        capital_note = f"资金{capital:.0f}元。{max_price_constraint}精选3-4只股。"
+        capital_note = f"资金{capital:.0f}元。{max_price_constraint}精选2-3只股。"
     elif capital <= 100000:
-        capital_note = f"资金{capital//10000}万元。{max_price_constraint}可配置4-5只股。"
+        capital_note = f"资金{capital//10000}万元。{max_price_constraint}可配置3-5只股。"
     else:
-        capital_note = f"资金{capital//10000}万元。{max_price_constraint}可配置5-7只股。"
+        capital_note = f"资金{capital//10000}万元。{max_price_constraint}可配置4-6只股。"
 
     return f"""# 智能投资组合构建任务
 

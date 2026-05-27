@@ -118,7 +118,9 @@
             <span class="unit">元</span>
         </div>
         <div class="quick-amounts">
+            <button class="amt-chip" onclick="setCapital(500)">500</button>
             <button class="amt-chip" onclick="setCapital(1000)">1千</button>
+            <button class="amt-chip" onclick="setCapital(3000)">3千</button>
             <button class="amt-chip" onclick="setCapital(5000)">5千</button>
             <button class="amt-chip" onclick="setCapital(10000)">1万</button>
             <button class="amt-chip active" onclick="setCapital(50000)">5万</button>
@@ -197,8 +199,9 @@ function checkCapital() {
     const h = document.getElementById('max-price-hint');
     const s = Math.floor(capital * 0.2 / 100);
     h.textContent = `1手=100股。建议每股 ≤ ${s}元（可买${Math.floor(capital/(s*100))||1}手）。最多买得起${Math.floor(capital/100)}元/股的股票`;
-    if(capital<3000){w.style.display='block';w.innerHTML=`<span style="color:#f59e0b">⚠ 小资金(${capital}元)</span> 必须设单股价上限，精选2只即可`}
-    else if(capital<10000){w.style.display='block';w.innerHTML=`<span style="color:var(--accent)">小资金(${capital}元)</span> 建议上限≤${s}元，选3-4只`}
+    if(capital<2000){w.style.display='block';w.innerHTML=`<span style="color:#f59e0b">极小资金(${capital}元)</span> 只能买1手，建议全仓1只≤${Math.floor(capital/100)}元股票，严格止损-5% `}
+    else if(capital<5000){w.style.display='block';w.innerHTML=`<span style="color:#f59e0b">小资金(${capital}元)</span> 建议1-2只，上限≤${Math.floor(capital*0.9/100)}元`}
+    else if(capital<10000){w.style.display='block';w.innerHTML=`<span style="color:var(--accent)">小资金(${capital}元)</span> 建议上限≤${s}元，选2-3只`}
     else{w.style.display='none'}
 }
 

@@ -38,16 +38,18 @@ class PortfolioService:
         return self._client
 
     async def build_portfolio(self, capital: float, risk_profile: str, max_price: float = 0) -> dict:
-        """构建完整的投资组合方案。max_price=单股价上限，0=不限。"""
+        """构建完整的投资组合方案。支持最低100元资金。"""
         if not config.DEEPSEEK_API_KEY:
             return {"error": "请配置 DEEPSEEK_API_KEY"}
 
-        if capital < 1000:
-            return {"error": "底仓金额至少1000元"}
+        if capital < 100:
+            return {"error": "资金至少100元（A股1手=100股，最便宜的股票约1元/股=100元/手）"}
 
-        # 验证 max_price 合理性
-        if max_price > 0 and max_price * 100 > capital:
-            return {"error": f"单股价{max_price}元×100股={max_price*100:.0f}元/手 > 总资金{capital:.0f}元，买不起！请降低上限或增加资金"}
+        # 小资金自动设置单股价上限
+        if max_price <= 0 and capital <= 5000:
+            max_price = capital / 100 * 0.9  # 留10%余量
+        if max_price > 0 and max_price * 100 > capital * 0.95:
+            max_price = capital * 0.95 / 100
 
         valid_profiles = ["保守", "稳健", "进取"]
         if risk_profile not in valid_profiles:
@@ -97,15 +99,18 @@ class PortfolioService:
             # 批量获取实时行情
             all_quotes = data_service.get_batch_quotes(pre_filtered[:80])
 
+            # 小资金：放宽到1手≤总资金即可（允许单只满仓）
+            max_lot_ratio = 1.0 if capital <= 3000 else 0.5 if capital <= 10000 else 0.25
+
             for code, q in all_quotes.items():
                 price = q.get("price", 0)
                 if price <= 0:
                     continue
                 if max_price > 0 and price > max_price:
-                    continue  # 超过单股价上限，剔除
+                    continue
                 lot_cost = price * 100
-                if lot_cost > capital * 0.25:
-                    continue  # 1手超过25%总资金，买不起
+                if lot_cost > capital * max_lot_ratio:
+                    continue
                 candidates.append({
                     "code": code,
                     "name": q["name"],
@@ -191,14 +196,16 @@ class PortfolioService:
 
                     # ⚠️ 关键：验证是否买得起至少1手
                     if lot_cost > alloc_amount:
-                        # 买不起——调整分配额为1手成本
                         alloc_amount = lot_cost
                         pos["allocation_amount"] = lot_cost
                         pos["allocation_pct"] = round(lot_cost / capital * 100, 1)
 
-                    # ⚠️ 关键：确保不超总资金
-                    if total_allocated + alloc_amount > capital:
-                        alloc_amount = max(lot_cost, capital - total_allocated)
+                    # ⚠️ 确保不超总资金（小资金允许满仓一只）
+                    remaining = capital - total_allocated
+                    if remaining <= 0:
+                        continue  # 资金已用完，跳过后续股票
+                    if alloc_amount > remaining:
+                        alloc_amount = max(lot_cost, remaining)
                         pos["allocation_amount"] = alloc_amount
                         pos["allocation_pct"] = round(alloc_amount / capital * 100, 1)
 
